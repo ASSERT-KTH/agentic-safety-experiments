@@ -2,6 +2,8 @@ Agentic safetey can be
 - baked into the model (the model refuses to issue dangerous calls)
 - put in the harness with harness or a dedicated classifier.
 
+Here, we perform experiments to collect empirical evidence.
+
 ## Harness
 
 Write a small harness on top of agentknit that does not wirte the actual tool call exec_shell and all file read/write in memory.
