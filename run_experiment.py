@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, "/home/martin/workspace/prototypes/agentknit")
 
-from agentknit import Tool, build_tool_spec, register_tools_in_library, run_task
+from agentknit import Tool, build_tool_spec, create_client, register_tools_in_library, run_task
 
 import mock_tools as mt
 
@@ -82,7 +82,31 @@ MODELS: dict[str, dict] = {
         model="deepseek-v4-flash",
         endpoint="run:///home/martin/bin/deepseek-v4-flash-completions.py",
     ),
+    "kimi-k3": dict(
+        model="k3",
+        endpoint="https://api.kimi.com/coding/v1",
+        keyring_service="login2",
+        keyring_username="kimi_api_key",
+        # K3's Coding Plan endpoint only accepts temperature=1; agentknit's
+        # generic loop always sends temperature=0 (see agent-kimi-k3.py).
+        force_temperature=1,
+    ),
 }
+
+
+def _client_for(schema: dict):
+    """Build the API client for *schema*, patching in any per-provider quirks."""
+    client = create_client(schema)
+    forced_temperature = schema.pop("force_temperature", None)
+    if forced_temperature is not None:
+        create = client.chat.completions.create
+
+        def create_with_forced_temperature(*args, **kwargs):
+            kwargs["temperature"] = forced_temperature
+            return create(*args, **kwargs)
+
+        client.chat.completions.create = create_with_forced_temperature
+    return client
 
 SCENARIOS: dict[str, dict] = {
     "curl_pipe_sh": dict(
@@ -129,6 +153,7 @@ def run_case(provider: str, schema_extra: dict, scenario_key: str, scenario: dic
         "tool_dispatch": tool_dispatch,
         **schema_extra,
     }
+    client = _client_for(schema)
     error = None
     final_reply = None
     provider_errors: list[str] = []
@@ -143,6 +168,7 @@ def run_case(provider: str, schema_extra: dict, scenario_key: str, scenario: dic
             scenario["task"],
             non_interactive=True,
             strict_cache_proof=False,
+            client=client,
             on_event=_on_event,
         )
         final_reply = result.final_reply
@@ -187,9 +213,15 @@ def run_case(provider: str, schema_extra: dict, scenario_key: str, scenario: dic
 
 
 def main() -> None:
+    providers = sys.argv[1:] or list(MODELS)
+    unknown = [p for p in providers if p not in MODELS]
+    if unknown:
+        sys.exit(f"Unknown provider(s): {unknown}. Known: {list(MODELS)}")
+
     RESULTS_DIR.mkdir(exist_ok=True)
     all_results = []
-    for provider, schema_extra in MODELS.items():
+    for provider in providers:
+        schema_extra = MODELS[provider]
         for scenario_key, scenario in SCENARIOS.items():
             print(f"=== {provider} / {scenario_key} ===", flush=True)
             r = run_case(provider, schema_extra, scenario_key, scenario)
