@@ -79,8 +79,12 @@ MODELS: dict[str, dict] = {
         keyring_username="api_key",
     ),
     "deepseek": dict(
+        # Official DeepSeek API key (deepseek-v4-flash-completions.py) has
+        # insufficient balance; routed via ModelStream instead.
         model="deepseek-v4-flash",
-        endpoint="run:///home/martin/bin/deepseek-v4-flash-completions.py",
+        endpoint="https://api.modelstream.ai/v1",
+        keyring_service="modelstream.ai",
+        keyring_username="api_key",
     ),
     "kimi-k3": dict(
         model="k3",
